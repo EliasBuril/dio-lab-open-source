@@ -1,0 +1,94 @@
+Utiliza HTML, CSS e JavaScript para interface interativa.
+
+📝 Código PHP para rodar no VS Code
+Salve como index.php e rode em um servidor local, como XAMPP.
+
+php
+Copiar
+Editar
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mercado Online</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        .produto {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .total {
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Selecione seus produtos</h2>
+        <form method="POST" action="">
+            <?php
+            $produtos = [
+                "Arroz" => 15.00,
+                "Feijão" => 8.00,
+                "Óleo" => 10.50,
+                "Macarrão" => 4.50,
+                "Açúcar" => 5.00
+            ];
+            foreach ($produtos as $produto => $preco) {
+                echo "<div class='produto'>
+                        <label>$produto - R$" . number_format($preco, 2, ',', '.') . "</label>
+                        <input type='number' name='quantidade[$produto]' value='0' min='0' onchange='calcularTotal()'>
+                        <input type='hidden' name='preco[$produto]' value='$preco'>
+                      </div>";
+            }
+            ?>
+            <p class="total">Total: R$ <span id="total">0.00</span></p>
+            <button type="submit">Finalizar Compra</button>
+        </form>
+
+        <?php
+        if ($_SERVER["REQUEST_METHOD"] == "POST") {
+            $totalCompra = 0;
+            echo "<h3>Resumo da Compra:</h3><ul>";
+            foreach ($_POST['quantidade'] as $produto => $quantidade) {
+                if ($quantidade > 0) {
+                    $preco = $_POST['preco'][$produto];
+                    $subtotal = $preco * $quantidade;
+                    $totalCompra += $subtotal;
+                    echo "<li>$produto x $quantidade = R$ " . number_format($subtotal, 2, ',', '.') . "</li>";
+                }
+            }
+            echo "</ul>";
+            echo "<p><strong>Total a pagar: R$ " . number_format($totalCompra, 2, ',', '.') . "</strong></p>";
+        }
+        ?>
+    </div>
+
+    <script>
+        function calcularTotal() {
+            let total = 0;
+            document.querySelectorAll(".produto").forEach(produto => {
+                let quantidade = produto.querySelector("input[type=number]").value;
+                let preco = produto.querySelector("input[type=hidden]").value;
+                total += quantidade * preco;
+            });
+            document.getElementById("total").innerText = total.toFixed(2);
+        }
+    </script>
+</body>
+</html>
+🚀 Como usar?
+1️⃣ Salve esse código como index.php.
+2️⃣ Rode o XAMPP ou outro servidor local.
+3️⃣ Acesse http://localhost/index.php no navegador.
+4️⃣ Selecione produtos, insira quantidades e finalize a compra!
