@@ -1,0 +1,180 @@
+Documentação do Projeto RPG Akatsuki
+Visão Geral do Projeto
+O projeto é um jogo de RPG baseado no universo de Naruto , focado na organização Akatsuki . O jogo permite que os jogadores escolham um personagem, participem de batalhas, completem missões e aumentem seu nível, tudo enquanto interagem com outros jogadores ou com NPCs (Personagens não jogáveis).
+
+O projeto será desenvolvido em PHP, utilizando o servidor local (como XAMPP ou WAMP) para rodar o backend do jogo. Para o frontend, o HTML e o CSS serão usados ​​para criar a interface do usuário.
+
+Objetivo do Projeto
+O objetivo principal é criar uma plataforma simples onde os jogadores possam escolher um dos membros da Akatsuki como seu personagem, participar de batalhas, completar missões e interagir com o jogo.
+
+Estrutura de Arquivos
+texto simples
+
+/akatsuki-rpg
+│
+├── /assets
+│   ├── /css
+│   └── /images
+│
+├── /includes
+│   ├── db.php
+│   └── header.php
+│
+├── /characters
+│   ├── itachi.php
+│   └── pain.php
+│
+├── index.php
+├── login.php
+├── register.php
+└── battle.php
+Descrição dos Arquivos
+/assets : Contém arquivos estáticos como imagens e estilos CSS.
+
+/css : Contém os estilos CSS para o jogo.
+/images : Contém imagens de personagens, cenários, etc.
+/includes : Contém arquivos que serão incluídos no código principal (ex: conexão com o banco de dados, cabeçalhos).
+
+db.php : Arquivo responsável pela conexão com o banco de dados.
+header.php : Contém o cabeçalho HTML comum a todas as páginas.
+/characters : Arquivo PHP contendo as definições de cada personagem.
+
+itachi.php : Detalhes sobre o personagem Itachi Uchiha.
+pain.php : Detalhes sobre o personagem Pain.
+index.php : Página inicial do jogo, onde os jogadores escolhem o personagem e iniciam a jornada.
+
+login.php : Página de login para usuários registrados.
+
+Register.php : Página para cadastro de novos jogadores.
+
+battle.php : Página para batalhas entre personagens.
+
+Banco de Dados
+A aplicação utiliza um banco de dados MySQL para armazenar as informações dos usuários, personagens e progresso no jogo.
+
+Estrutura do Banco de Dados
+Tabelausers
+SQLite
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    level INT DEFAULT 1,
+    experience INT DEFAULT 0,
+    character VARCHAR(255)
+);
+id : Identificador único do usuário.
+username : Nome do usuário do jogador.
+senha : senha do jogador (deve ser armazenada de forma segura, como hash).
+email : Endereço de e-mail do jogador.
+nível : Nível do jogador.
+experiência : Experiência acumulada pelo jogador.
+personagem : Personagem escolhida pelo jogador (referência ao personagem de Akatsuki).
+Tabelabattles
+SQLite
+
+CREATE TABLE battles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    enemy VARCHAR(255) NOT NULL,
+    result VARCHAR(255),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+id : Identificador único da batalha.
+user_id : ID do usuário que participou da batalha.
+inimigo : Nome do inimigo enfrentado.
+resultado : Resultado da batalha (vitória/derrota).
+Funcionalidade Principal
+1. Registro de Jogador
+Os jogadores se registrar no jogo fornecem um nome de usuário, e-mail e senha. Após o registro, o jogador pode escolher um personagem da Akatsuki (ex: Itachi, Pain) e começar a jogar.
+
+Páginaregister.php
+php
+
+<?php
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $email = $_POST['email'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+
+    // Conectar ao banco de dados
+    include('includes/db.php');
+
+    $sql = "INSERT INTO users (username, email, password) VALUES ('$username', '$email', '$password')";
+    if (mysqli_query($conn, $sql)) {
+        echo "Usuário registrado com sucesso!";
+    } else {
+        echo "Erro ao registrar usuário: " . mysqli_error($conn);
+    }
+}
+?>
+<form method="POST">
+    Nome de Usuário: <input type="text" name="username" required><br>
+    E-mail: <input type="email" name="email" required><br>
+    Senha: <input type="password" name="password" required><br>
+    <button type="submit">Registrar</button>
+</form>
+2. Login de Jogador
+A página de login permite que os jogadores entrem no jogo usando o nome de usuário e senha.
+
+Páginalogin.php
+php
+
+<?php
+session_start();
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    // Conectar ao banco de dados
+    include('includes/db.php');
+
+    $sql = "SELECT * FROM users WHERE username = '$username'";
+    $result = mysqli_query($conn, $sql);
+    $user = mysqli_fetch_assoc($result);
+
+    if ($user && password_verify($password, $user['password'])) {
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['username'] = $user['username'];
+        echo "Login bem-sucedido!";
+        header('Location: index.php');
+    } else {
+        echo "Credenciais inválidas!";
+    }
+}
+?>
+<form method="POST">
+    Nome de Usuário: <input type="text" name="username" required><br>
+    Senha: <input type="password" name="password" required><br>
+    <button type="submit">Entrar</button>
+</form>
+3. Batalha entre Jogadores
+A página battle.phppermite que os jogadores participem de batalhas, enfrentando inimigos e podendo ganhar experiência e itens.
+
+Páginabattle.php
+php
+
+<?php
+session_start();
+
+// Verificar se o usuário está logado
+if (!isset($_SESSION['user_id'])) {
+    echo "Você precisa estar logado para batalhar!";
+    exit;
+}
+
+$personagem = "Itachi"; // Personagem escolhido pelo jogador (exemplo)
+$inimigo = "Naruto"; // Inimigo aleatório ou definido
+
+// Simular a batalha
+$resultado = rand(0, 1) ? 'Vitoria' : 'Derrota';
+
+// Atualizar banco de dados com o resultado da batalha
+include('includes/db.php');
+$sql = "INSERT INTO battles (user_id, enemy, result) VALUES ('".$_SESSION['user_id']."', '$inimigo', '$resultado')";
+mysqli_query($conn, $sql);
+
+echo "Você enfrentou $inimigo e a batalha terminou em $resultado!";
+?>
