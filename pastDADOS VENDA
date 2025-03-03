@@ -1,0 +1,146 @@
+1. Estrutura de Arquivos:
+index.php— 
+process.php—
+2. index.php 
+<?php
+// Definir os produtos disponíveis na feira
+$produtos = [
+    "Maçã" => 2.50,
+    "Banana" => 1.80,
+    "Laranja" => 3.00,
+    "Abacaxi" => 5.00,
+    "Tomate" => 4.50
+];
+
+// Verificar se a sessão foi iniciada
+session_start();
+
+// Inicializar o carrinho
+if (!isset($_SESSION['carrinho'])) {
+    $_SESSION['carrinho'] = [];
+}
+
+// Adicionar item ao carrinho
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['produto'])) {
+    $produto = $_POST['produto'];
+    $quantidade = $_POST['quantidade'];
+    
+    // Verificar se o produto já está no carrinho
+    if (isset($_SESSION['carrinho'][$produto])) {
+        $_SESSION['carrinho'][$produto] += $quantidade;
+    } else {
+        $_SESSION['carrinho'][$produto] = $quantidade;
+    }
+}
+
+?>
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lojinha da Feira</title>
+</head>
+<body>
+    <h1>Bem-vindo à Lojinha da Feira</h1>
+    
+    <h2>Produtos Disponíveis:</h2>
+    <form method="POST">
+        <select name="produto" required>
+            <?php foreach ($produtos as $nome => $preco): ?>
+                <option value="<?= $nome ?>"><?= $nome ?> - R$ <?= number_format($preco, 2, ',', '.') ?></option>
+            <?php endforeach; ?>
+        </select>
+        
+        <label for="quantidade">Quantidade:</label>
+        <input type="number" name="quantidade" min="1" value="1" required>
+        
+        <button type="submit">Adicionar ao Carrinho</button>
+    </form>
+    
+    <h2>Carrinho de Compras:</h2>
+    <?php if (empty($_SESSION['carrinho'])): ?>
+        <p>Seu carrinho está vazio.</p>
+    <?php else: ?>
+        <ul>
+            <?php
+            $total = 0;
+            foreach ($_SESSION['carrinho'] as $produto => $quantidade):
+                $precoProduto = $produtos[$produto];
+                $subtotal = $precoProduto * $quantidade;
+                $total += $subtotal;
+            ?>
+                <li><?= $produto ?> (<?= $quantidade ?>) - R$ <?= number_format($subtotal, 2, ',', '.') ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <h3>Total: R$ <?= number_format($total, 2, ',', '.') ?></h3>
+        <form action="process.php" method="POST">
+            <button type="submit">Finalizar Compra</button>
+        </form>
+    <?php endif; ?>
+</body>
+</html>
+3. processo.php
+<?php
+session_start();
+
+if (empty($_SESSION['carrinho'])) {
+    echo "Seu carrinho está vazio. Não foi possível finalizar a compra.";
+    exit;
+}
+
+$total = 0;
+foreach ($_SESSION['carrinho'] as $produto => $quantidade) {
+    $precoProduto = 0;
+    if ($produto == "Maçã") $precoProduto = 2.50;
+    if ($produto == "Banana") $precoProduto = 1.80;
+    if ($produto == "Laranja") $precoProduto = 3.00;
+    if ($produto == "Abacaxi") $precoProduto = 5.00;
+    if ($produto == "Tomate") $precoProduto = 4.50;
+
+    $subtotal = $precoProduto * $quantidade;
+    $total += $subtotal;
+}
+
+// Limpar o carrinho após a compra
+unset($_SESSION['carrinho']);
+
+?>
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compra Finalizada</title>
+</head>
+<body>
+    <h1>Compra Finalizada</h1>
+    <p>Obrigado pela sua compra! Aqui está o resumo:</p>
+    
+    <ul>
+        <?php
+        foreach ($_SESSION['carrinho'] as $produto => $quantidade):
+            $precoProduto = 0;
+            if ($produto == "Maçã") $precoProduto = 2.50;
+            if ($produto == "Banana") $precoProduto = 1.80;
+            if ($produto == "Laranja") $precoProduto = 3.00;
+            if ($produto == "Abacaxi") $precoProduto = 5.00;
+            if ($produto == "Tomate") $precoProduto = 4.50;
+            
+            $subtotal = $precoProduto * $quantidade;
+            echo "<li>$produto (Quantidade: $quantidade) - R$ ".number_format($subtotal, 2, ',', '.')."</li>";
+        endforeach;
+        ?>
+    </ul>
+    
+    <h3>Total: R$ <?= number_format($total, 2, ',', '.') ?></h3>
+    
+    <a href="index.php">Voltar para a Lojinha</a>
+</body>
+</html>
+4. Criação dos Arquivos : Crie os arquivosindex.phpeprocess.phpnão
+Abrir o Navegador : Alocalhost/nomedoseuarquivo/index.phpe
+Adicionar Produtos :
+Finalizar Compra : Ao adicionar produto
