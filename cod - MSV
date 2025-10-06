@@ -1,0 +1,89 @@
+cpf-validator/
+│
+├─ .vscode/
+│   └─ settings.json
+│
+├─ function_app/
+│   ├─ __init__.py
+│   └─ function.json
+│
+├─ requirements.txt
+└─ host.json
+{
+    "azureFunctions.pythonVenv": ".venv"
+}
+azure-functions
+{
+  "version": "2.0"
+}
+import azure.functions as func
+import re
+import json
+
+def validar_cpf(cpf: str) -> bool:
+    # Remove caracteres não numéricos
+    cpf = re.sub(r'\D', '', cpf)
+
+    if len(cpf) != 11 or cpf == cpf[0] * 11:
+        return False
+
+    # Validação do primeiro dígito verificador
+    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+    dig1 = (soma * 10 % 11) % 10
+    if dig1 != int(cpf[9]):
+        return False
+
+    # Validação do segundo dígito verificador
+    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+    dig2 = (soma * 10 % 11) % 10
+    if dig2 != int(cpf[10]):
+        return False
+
+    return True
+
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        cpf = req.params.get('cpf')
+        if not cpf:
+            try:
+                req_body = req.get_json()
+                cpf = req_body.get('cpf')
+            except ValueError:
+                pass
+
+        if not cpf:
+            return func.HttpResponse(
+                json.dumps({"error": "CPF não fornecido"}),
+                status_code=400,
+                mimetype="application/json"
+            )
+
+        valido = validar_cpf(cpf)
+        return func.HttpResponse(
+            json.dumps({"cpf": cpf, "valido": valido}),
+            status_code=200,
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        return func.HttpResponse(
+            json.dumps({"error": str(e)}),
+            status_code=500,
+            mimetype="application/json"
+        )
+{
+  "bindings": [
+    {
+      "authLevel": "function",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "methods": ["get", "post"]
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "$return"
+    }
+  ]
+}
