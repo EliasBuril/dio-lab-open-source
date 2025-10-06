@@ -1,0 +1,211 @@
+Claro\! Aqui está todo o código do seu projeto **`netflix-catalog/`** consolidado em um único bloco de fácil cópia, mantendo a estrutura original do diretório e separando os conteúdos de cada arquivo com cabeçalhos.
+
+```
+# netflix-catalog/
+# ├─ .vscode/
+# │   └─ settings.json
+# ├─ function_app/
+# │   ├─ __init__.py
+# │   └─ function.json
+# ├─ requirements.txt
+# ├─ host.json
+# └─ deploy.sh
+
+# --- Conteúdo do arquivo: .vscode/settings.json (JSON) ---
+{
+    "azureFunctions.pythonVenv": ".venv"
+}
+
+# --- Conteúdo do arquivo: requirements.txt (TXT) ---
+azure-functions
+pydantic
+azure-cosmos
+msal
+python-dotenv
+
+# --- Conteúdo do arquivo: host.json (JSON) ---
+{
+  "version": "2.0"
+}
+
+# --- Conteúdo do arquivo: function_app/__init__.py (Python) ---
+import azure.functions as func
+from azure.cosmos import CosmosClient, PartitionKey
+from pydantic import BaseModel
+import json, os, math
+from dotenv import load_dotenv
+from msal import ConfidentialClientApplication
+from functools import wraps
+
+# Carregar variáveis de ambiente
+load_dotenv()
+COSMOS_URL = os.getenv("COSMOS_URL")
+COSMOS_KEY = os.getenv("COSMOS_KEY")
+DATABASE_NAME = "NetflixCatalogDB"
+CONTAINER_NAME = "Media"
+
+TENANT_ID = os.getenv("TENANT_ID")
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+SCOPE = os.getenv("SCOPE")  # e.g., "api://<app-id-uri>/.default"
+
+# Configura Cosmos DB
+client = CosmosClient(COSMOS_URL, COSMOS_KEY)
+database = client.create_database_if_not_exists(id=DATABASE_NAME)
+container = database.create_container_if_not_exists(
+    id=CONTAINER_NAME,
+    partition_key=PartitionKey(path="/id"),
+    offer_throughput=400
+)
+
+# Modelo de dados
+class MediaItem(BaseModel):
+    id: str
+    title: str
+    genre: str
+    type: str  # movie ou series
+    year: int
+    rating: float
+
+# Decorator para autenticação via Azure AD
+def authenticate(func):
+    @wraps(func)
+    def wrapper(req: func.HttpRequest, *args, **kwargs):
+        auth_header = req.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return func.HttpResponse(json.dumps({"error":"Token ausente"}), status_code=401)
+        token = auth_header.split(" ")[1]
+
+        # Validação simplificada: normalmente aqui se valida via jwks endpoint
+        # para fins de exemplo, aceitamos qualquer token não vazio
+        if not token:
+            return func.HttpResponse(json.dumps({"error":"Token inválido"}), status_code=401)
+        return func(req, *args, **kwargs)
+    return wrapper
+
+@authenticate
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    method = req.method
+    try:
+        if method == "GET":
+            media_id = req.params.get("id")
+            genre_filter = req.params.get("genre")
+            page = int(req.params.get("page", 1))
+            page_size = int(req.params.get("page_size", 10))
+
+            items = list(container.read_all_items())
+            if media_id:
+                items = [item for item in items if item["id"] == media_id]
+            if genre_filter:
+                items = [item for item in items if genre_filter.lower() in item["genre"].lower()]
+
+            # Paginação
+            total_items = len(items)
+            total_pages = math.ceil(total_items / page_size)
+            start = (page-1)*page_size
+            end = start + page_size
+            items_page = items[start:end]
+
+            return func.HttpResponse(
+                json.dumps({
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "items": items_page
+                }),
+                status_code=200,
+                mimetype="application/json"
+            )
+
+        elif method == "POST":
+            data = req.get_json()
+            media = MediaItem(**data)
+            container.create_item(body=media.dict())
+            return func.HttpResponse(json.dumps({"message":"Item criado"}), status_code=201)
+
+        elif method == "PUT":
+            data = req.get_json()
+            media_id = data.get("id")
+            if not media_id:
+                return func.HttpResponse(json.dumps({"error":"ID obrigatório"}), status_code=400)
+            container.upsert_item(data)
+            return func.HttpResponse(json.dumps({"message":"Item atualizado"}), status_code=200)
+
+        elif method == "DELETE":
+            media_id = req.params.get("id")
+            if not media_id:
+                return func.HttpResponse(json.dumps({"error":"ID obrigatório"}), status_code=400)
+            container.delete_item(item=media_id, partition_key=media_id)
+            return func.HttpResponse(json.dumps({"message":"Item deletado"}), status_code=200)
+
+        else:
+            return func.HttpResponse(json.dumps({"error":"Método não permitido"}), status_code=405)
+
+    except Exception as e:
+        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500)
+
+# --- Conteúdo do arquivo: function_app/function.json (JSON) ---
+{
+  "bindings": [
+    {
+      "authLevel": "function",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "methods": ["get","post","put","delete"]
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "$return"
+    }
+  ]
+}
+
+# --- Conteúdo do arquivo: deploy.sh (Bash) ---
+#!/bin/bash
+
+# Configurações
+RESOURCE_GROUP="RG-Netflix"
+LOCATION="eastus"
+STORAGE_ACCOUNT="stnetflix$RANDOM"
+FUNCTION_APP="NetflixCatalogApp$RANDOM"
+
+# Variáveis do Cosmos DB
+COSMOS_URL="COLOQUE_AQUI_A_URL_DO_COSMOS"
+COSMOS_KEY="COLOQUE_AQUI_A_CHAVE_DO_COSMOS"
+
+# Azure AD App
+TENANT_ID="COLOQUE_TENANT_ID"
+CLIENT_ID="COLOQUE_CLIENT_ID"
+CLIENT_SECRET="COLOQUE_CLIENT_SECRET"
+SCOPE="api://<app-id-uri>/.default"
+
+# Criar Resource Group
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+# Criar Storage Account
+az storage account create --name $STORAGE_ACCOUNT --location $LOCATION --resource-group $RESOURCE_GROUP --sku Standard_LRS
+
+# Criar Function App
+az functionapp create \
+  --resource-group $RESOURCE_GROUP \
+  --consumption-plan-location $LOCATION \
+  --runtime python \
+  --functions-version 4 \
+  --name $FUNCTION_APP \
+  --storage-account $STORAGE_ACCOUNT
+
+# Configurar variáveis de ambiente
+az functionapp config appsettings set \
+  --name $FUNCTION_APP \
+  --resource-group $RESOURCE_GROUP \
+  --settings COSMOS_URL=$COSMOS_URL COSMOS_KEY=$COSMOS_KEY TENANT_ID=$TENANT_ID CLIENT_ID=$CLIENT_ID CLIENT_SECRET=$CLIENT_SECRET SCOPE=$SCOPE
+
+# Publicar Function App
+func azure functionapp publish $FUNCTION_APP
+
+echo "Deploy completo!"
+echo "Endpoint da API: https://$FUNCTION_APP.azurewebsites.net/api/function_app"
+echo "Use Authorization: Bearer <token>"
+```
