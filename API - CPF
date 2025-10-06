@@ -1,0 +1,87 @@
+# Login na sua conta do Azure
+az login
+
+# Criar Resource Group
+az group create --name RG-APIs --location eastus
+
+# Criar Storage Account para Function App
+az storage account create --name stcapis12345 --location eastus --resource-group RG-APIs --sku Standard_LRS
+
+# Criar Function App (Python como exemplo)
+az functionapp create --resource-group RG-APIs --consumption-plan-location eastus --runtime python --functions-version 4 --name ApiValidaCPF --storage-account stcapis12345
+import azure.functions as func
+import re
+import json
+
+def validar_cpf(cpf: str) -> bool:
+    cpf = re.sub(r'\D', '', cpf)
+    if len(cpf) != 11 or cpf == cpf[0]*11: return False
+    soma1 = sum(int(cpf[i])*(10-i) for i in range(9))
+    dig1 = (soma1*10 % 11) % 10
+    if dig1 != int(cpf[9]): return False
+    soma2 = sum(int(cpf[i])*(11-i) for i in range(10))
+    dig2 = (soma2*10 % 11) % 10
+    return dig2 == int(cpf[10])
+
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    cpf = req.params.get('cpf') or (req.get_json().get('cpf') if req.get_json() else None)
+    if not cpf: return func.HttpResponse(json.dumps({"error":"CPF não fornecido"}), status_code=400, mimetype="application/json")
+    return func.HttpResponse(json.dumps({"cpf": cpf, "valido": validar_cpf(cpf)}), mimetype="application/json")
+# Dentro da pasta do projeto
+func azure functionapp publish ApiValidaCPF
+# Criar instância do APIM
+az apim create --name APIM-CPF --resource-group RG-APIs --publisher-email seuemail@dominio.com --publisher-name SeuNome --location eastus --sku Consumption
+GET https://<APIM-CPF>.azure-api.net/cpf-api?cpf=12345678909
+{"cpf":"12345678909"}
+#!/bin/bash
+
+# Variáveis do projeto
+RESOURCE_GROUP="RG-APIs"
+LOCATION="eastus"
+STORAGE_ACCOUNT="stcapis$RANDOM"  # nome único
+FUNCTION_APP="ApiValidaCPF$RANDOM"
+APIM_NAME="APIM-CPF-$RANDOM"
+PUBLISHER_NAME="SeuNome"
+PUBLISHER_EMAIL="seuemail@dominio.com"
+API_PATH="cpf-api"
+
+echo "Criando Resource Group..."
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+echo "Criando Storage Account..."
+az storage account create --name $STORAGE_ACCOUNT --location $LOCATION --resource-group $RESOURCE_GROUP --sku Standard_LRS
+
+echo "Criando Function App..."
+az functionapp create \
+  --resource-group $RESOURCE_GROUP \
+  --consumption-plan-location $LOCATION \
+  --runtime python \
+  --functions-version 4 \
+  --name $FUNCTION_APP \
+  --storage-account $STORAGE_ACCOUNT
+
+echo "Publicando Function App..."
+func azure functionapp publish $FUNCTION_APP
+
+echo "Criando Azure API Management..."
+az apim create \
+  --name $APIM_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --publisher-email $PUBLISHER_EMAIL \
+  --publisher-name $PUBLISHER_NAME \
+  --location $LOCATION \
+  --sku Consumption
+
+echo "Adicionando Function App ao APIM..."
+FUNCTION_URL="https://$FUNCTION_APP.azurewebsites.net/api/function_app"
+az apim api create \
+  --service-name $APIM_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --path $API_PATH \
+  --display-name "API de Validação de CPF" \
+  --protocols https \
+  --service-url $FUNCTION_URL \
+  --api-id $API_PATH
+
+echo "Deploy completo!"
+echo "Endpoint da API: https://$APIM_NAME.azure-api.net/$API_PATH?cpf=12345678909"
