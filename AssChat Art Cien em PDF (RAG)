@@ -1,0 +1,136 @@
+import streamlit as st
+import os
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
+
+# --- Configuração de Layout do Streamlit ---
+st.set_page_config(page_title="Assistente RAG para PDFs", layout="wide")
+st.title("🤖 Assistente de Pesquisa com IA (RAG)")
+st.caption("Carregue seus PDFs, indexe e faça perguntas baseadas no conteúdo dos documentos.")
+
+# --- Constantes e Variáveis de Sessão ---
+if 'history' not in st.session_state:
+    st.session_state['history'] = []
+if 'vectorstore' not in st.session_state:
+    st.session_state['vectorstore'] = None
+if 'processed' not in st.session_state:
+    st.session_state['processed'] = False
+
+# --- FUNÇÕES CORE RAG ---
+
+@st.cache_resource
+def get_llm():
+    """Inicializa o modelo de linguagem (LLM) da OpenAI."""
+    # Para usar o Gemini, substitua por: 
+    # from langchain_google_genai import ChatGoogleGenerativeAI
+    # return ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0)
+    return ChatOpenAI(model="gpt-3.5-turbo", temperature=0.0)
+
+def process_documents(uploaded_files):
+    """Carrega, divide e indexa os documentos em um Vector Store."""
+    if not uploaded_files:
+        st.error("Por favor, carregue pelo menos um arquivo PDF.")
+        return None
+
+    all_docs = []
+    # 1. CARREGAMENTO
+    for file in uploaded_files:
+        temp_file_path = f"./temp_{file.name}"
+        with open(temp_file_path, "wb") as f:
+            f.write(file.getbuffer())
+        
+        loader = PyPDFLoader(temp_file_path)
+        all_docs.extend(loader.load())
+        os.remove(temp_file_path)
+
+    # 2. DIVISÃO (CHUNKING)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000, 
+        chunk_overlap=200, 
+        length_function=len
+    )
+    chunks = text_splitter.split_documents(all_docs)
+
+    # 3. EMBEDDINGS E INDEXAÇÃO
+    # Para usar o Google, substitua por: 
+    # from langchain_google_genai import GoogleGenerativeAIEmbeddings
+    # embeddings = GoogleGenerativeAIEmbeddings(model="text-embedding-004")
+    embeddings = OpenAIEmbeddings()
+    vectorstore = Chroma.from_documents(chunks, embeddings)
+    
+    return vectorstore
+
+def get_qa_chain(vectorstore):
+    """Cria a cadeia de conversação RAG."""
+    llm = get_llm()
+    
+    # 4. CRIAÇÃO DA CADEIA RAG
+    # Combina a LLM com o Retriever (que busca no Vector Store)
+    qa_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vectorstore.as_retriever(),
+        return_source_documents=False  # Pode ser True para mostrar a fonte
+    )
+    return qa_chain
+
+# --- INTERFACE E LÓGICA DO CHAT ---
+
+# Área de Upload e Processamento
+with st.sidebar:
+    st.subheader("1. Carregue seus PDFs")
+    uploaded_files = st.file_uploader(
+        "Selecione um ou mais arquivos PDF", 
+        type="pdf", 
+        accept_multiple_files=True
+    )
+    
+    process_button = st.button("2. Processar e Indexar Documentos", type="primary", disabled=not uploaded_files)
+    
+    if process_button:
+        with st.spinner("Processando documentos... Isso pode levar alguns minutos..."):
+            st.session_state['vectorstore'] = process_documents(uploaded_files)
+            if st.session_state['vectorstore']:
+                st.session_state['processed'] = True
+                st.success(f"Sucesso! {len(uploaded_files)} documento(s) processado(s) e indexado(s).")
+                st.session_state['history'] = [] # Limpa o histórico ao processar novos docs
+
+# Lógica do Chat
+if st.session_state['processed']:
+    qa_chain = get_qa_chain(st.session_state['vectorstore'])
+    
+    # Exibir Histórico do Chat
+    for chat in st.session_state['history']:
+        with st.chat_message(chat["role"]):
+            st.markdown(chat["content"])
+
+    # Entrada do Usuário
+    if prompt := st.chat_input("Pergunte algo sobre seus documentos..."):
+        # 1. Adiciona a pergunta do usuário ao histórico
+        st.session_state['history'].append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # 2. Executa a Chain RAG
+        with st.spinner("Buscando e gerando resposta..."):
+            # O histórico do LangChain usa tuplas (pergunta, resposta)
+            chat_history = [(c["content"], st.session_state['history'][i+1]["content"]) 
+                            for i, c in enumerate(st.session_state['history']) 
+                            if c["role"] == "user" and i+1 < len(st.session_state['history'])]
+
+            result = qa_chain.invoke(
+                {"question": prompt, "chat_history": chat_history}
+            )
+            response = result["answer"]
+        
+        # 3. Adiciona a resposta da IA ao histórico e exibe
+        st.session_state['history'].append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            st.markdown(response)
+
+else:
+    st.info("💡 Por favor, carregue e processe seus arquivos PDF na barra lateral para começar a fazer perguntas. Lembre-se de configurar sua chave de API!")
+
